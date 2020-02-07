@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches:
+    - master
+    - release/*
+
+jobs:
+  build_icolors:
+    runs-on: ubuntu-16.04
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build and deploy the Docker image
+      env: 
+        HEROKU_API_KEY: ${{ '7620b076-eed1-41b7-9a7c-d1bc89267ffd' }}
+        APP_NAME: ${{ 'excelexport1' }}
+      run: |
+        cd ./ASPNetCoreLabs/HerokuContainer
+        docker login --username=_ --password=$HEROKU_API_KEY registry.heroku.com
+        heroku container:push web -a $APP_NAME
+        heroku container:release web -a $APP_NAME
+ 
