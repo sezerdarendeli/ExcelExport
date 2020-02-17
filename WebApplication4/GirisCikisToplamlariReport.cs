@@ -8,7 +8,9 @@ namespace WebApplication4
 {
     public class GirisCikisToplamlariReport
     {
-       public User Users { get; set; }
+        internal string CalismaTuruText;
+
+        public User Users { get; set; }
     
        public string TarihAraligi { get; set; }
         public string UserId { get; internal set; }
@@ -20,7 +22,8 @@ namespace WebApplication4
         public int OrtalamaCalisilmasiGerekenSaat { get; internal set; }
         public int OrtalamaCalisilmasiGerekenDakika { get; internal set; }
         public bool OrtalamaninAltinda { get; internal set; }
-
+        public string GirisYapilmayanTarihler { get; internal set; }
+        public int MaxGunSayisi { get; internal set; }
     }
 
 }

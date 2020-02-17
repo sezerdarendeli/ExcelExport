@@ -37,7 +37,7 @@ export class Counter extends Component {
 
         this.setState({
             ...state,
-            justFileServiceResponse: 'Please wait'
+            justFileServiceResponse: 'Lütfen bekleyiniz..'
         });
 
         if (!state.hasOwnProperty('files')) {
@@ -63,7 +63,11 @@ export class Counter extends Component {
             },
             body: form
         }).then((response) => {
-            return response.text();
+            this.setState({
+                ...state,
+                justFileServiceResponse: 'Dosya yüklendi.'
+            });
+            this.props.history.push('/fetch-data/');
         })
 
         //axios.post('WeatherForecast/UploadJustFile', form)

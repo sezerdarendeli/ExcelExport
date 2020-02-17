@@ -10,5 +10,6 @@ namespace WebApplication4
         public List<GirisCikisToplamlariReport> RaporList { get; set; }
 
         public List<Manager> ManagerList { get; set; }
+        public int MaxCalismaSayisi { get; internal set; }
     }
 }

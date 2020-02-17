@@ -103,10 +103,14 @@ namespace WebApplication4.Controllers
             }
         }
 
-
+        public IEnumerable<DateTime> EachDay(DateTime from, DateTime thru)
+        {
+            for (var day = from.Date; day.Date <= thru.Date; day = day.AddDays(1))
+                yield return day;
+        }
 
         [HttpGet]
-        public ReportResponse Get(string ortalama = null, string manager = null)
+        public ReportResponse Get(string ortalama = null, string manager = null, int workingType = 0)
         {
             string cacheKey = $"personelListKey";
 
@@ -132,19 +136,20 @@ namespace WebApplication4.Controllers
 
             foreach (var item in valueList)
             {
+                string tarihler = "";
                 var reportItem = new GirisCikisToplamlariReport();
                 reportItem.UserId = item.Users.PersonelNo;
                 reportItem.Users = item.Users;
                 var ilkTarih = item.GunlukZiyaretSaatleri.OrderBy(e => e.Tarih).FirstOrDefault().Tarih;
                 var sonTarih = item.GunlukZiyaretSaatleri.OrderByDescending(e => e.Tarih).FirstOrDefault().Tarih;
-                reportItem.ToplamCalismaGunSayisi = item.GunlukZiyaretSaatleri.Count;
+                reportItem.ToplamCalismaGunSayisi = item.GunlukZiyaretSaatleri.GroupBy(e => e.Tarih).Count();
                 reportItem.TarihAraligi = ilkTarih.ToShortDateString() + " - " + sonTarih.ToShortDateString();
-                reportItem.ToplamCalismaDakika = Convert.ToInt32(item.GunlukZiyaretSaatleri.Sum(e => e.GunlukCalismaDakika));
+                reportItem.ToplamCalismaDakika = Convert.ToInt32(item.GunlukZiyaretSaatleri.GroupBy(x => new { x.Tarih, value = x.GunlukCalismaDakika }).Sum(e => e.Key.value));
                 reportItem.ToplamCalismaSaati = Convert.ToInt32(Math.Round(Convert.ToDouble(reportItem.ToplamCalismaDakika / 60)));
                 reportItem.OrtalamaCalisilmasiGerekenSaat = reportItem.ToplamCalismaGunSayisi * 8;
                 reportItem.OrtalamaCalisilmasiGerekenSaat = reportItem.ToplamCalismaGunSayisi * 8;
                 reportItem.OrtalamaCalisilmasiGerekenDakika = reportItem.OrtalamaCalisilmasiGerekenSaat * 60;
-
+                reportItem.CalismaTuruText = item.Users.CalismaTuruText;
                 if (reportItem.ToplamCalismaDakika < reportItem.OrtalamaCalisilmasiGerekenDakika)
                 {
                     reportItem.OrtalamaninAltinda = true;
@@ -156,9 +161,50 @@ namespace WebApplication4.Controllers
                 if (!response.ManagerList.Any(e => e.ManagerName == item.Users.Departman))
                     response.ManagerList.Add(new Manager { Key = item.Users.Departman, ManagerName = item.Users.Departman });
 
+                reportItem.GirisYapilmayanTarihler = "";
+
+                DateTime StartDate = new DateTime(2020, 1, 2, 0, 0, 0);
+                DateTime EndDate = new DateTime(2020, 2, 16, 0, 0, 0);
+                int count = 0;
+                int maxGunSayisi = 0;
+                foreach (DateTime day in EachDay(StartDate, EndDate))
+                {
+              
+
+                    if (day.DayOfWeek == DayOfWeek.Saturday || day.DayOfWeek == DayOfWeek.Sunday)
+                    {
+                        if (day.DayOfWeek == DayOfWeek.Saturday)
+                        {
+                            maxGunSayisi++;
+                        }
+                        continue;
+                    }
+                    else
+                    {
+                        maxGunSayisi++;
+                    }
+
+                    if (day.Date.ToShortDateString().Equals("20.01.2020"))
+                        continue;
+                    if (!item.GunlukZiyaretSaatleri.Any(e => e.Tarih.Equals(day.Date)))
+                    {
+                        tarihler += day.Date.ToShortDateString() + Environment.NewLine;
+                        count = count + 1;
+                    }
+
+                }
+                reportItem.ToplamCalismaGunSayisi = reportItem.ToplamCalismaGunSayisi - count;
+                reportItem.GirisYapilmayanTarihler = tarihler;
+                reportItem.MaxGunSayisi = maxGunSayisi;
                 non_filterresponse.Add(reportItem);
 
+
+
+
+
+
             }
+
             response.RaporList = new List<GirisCikisToplamlariReport>();
             if (string.IsNullOrEmpty(ortalama) || ortalama.Equals("hepsi"))
             {
@@ -178,6 +224,12 @@ namespace WebApplication4.Controllers
                 response.RaporList = response.RaporList.Where(e => e.Users.Departman == manager).ToList();
             }
 
+            if (workingType != 0)
+            {
+                response.RaporList = response.RaporList.Where(e => e.Users.CalismaTuru == workingType).ToList();
+            }
+
+            response.MaxCalismaSayisi = response.RaporList.Max(e => e.ToplamCalismaGunSayisi);
 
 
             return response;
@@ -352,8 +404,60 @@ namespace WebApplication4.Controllers
             object rowIndex = 2;
             List<User> userList = new List<User>();
             List<Visitor> visitorList = new List<Visitor>();
+            var calismaTurleriList = GetSheet2(path);
+            GetSheet1(path, listGirisLokasyonId, listCikisLokasyonId, userList, visitorList, calismaTurleriList);
+
+            foreach (var item in userList)
+            {
+                foreach (var visitorItem in visitorList.Where(e => e.PersonelNo == item.PersonelNo))
+                {
+                    if (item.VisitorsList == null)
+                        item.VisitorsList = new List<Visitor>();
+                    item.VisitorsList.Add(visitorItem);
+                }
+
+            }
+
+            //app.Workbooks.Close();
+            return userList;
+        }
+
+        private static List<CalismaTipleri> GetSheet2(string path)
+        {
+            var response = new List<CalismaTipleri>();
+
+            string con = @"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" + @path.Replace("\\", @"\") + ";" +
+            @"Extended Properties='Excel 8.0;HDR=Yes;'";
+            using (OleDbConnection connection = new OleDbConnection(con))
+            {
+                connection.Open();
+                OleDbCommand command = new OleDbCommand("select * from [Sheet2$]", connection);
 
 
+
+
+                using (OleDbDataReader dr = command.ExecuteReader())
+                {
+                    while (dr.Read())
+                    {
+                        var calismaTipleriClass = new CalismaTipleri();
+                        calismaTipleriClass.PersonelNo = Convert.ToString(dr[1]);
+                        calismaTipleriClass.CalismaTuru = Convert.ToInt32(dr[2]);
+
+                        response.Add(calismaTipleriClass);
+
+
+
+                    }
+                }
+            }
+
+            return response;
+
+        }
+
+        private static void GetSheet1(string path, List<string> listGirisLokasyonId, List<string> listCikisLokasyonId, List<User> userList, List<Visitor> visitorList, List<CalismaTipleri> calismaTurleriList)
+        {
             string con = @"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" + @path.Replace("\\", @"\") + ";" +
             @"Extended Properties='Excel 8.0;HDR=Yes;'";
             using (OleDbConnection connection = new OleDbConnection(con))
@@ -373,30 +477,8 @@ namespace WebApplication4.Controllers
                         var kartNo = Convert.ToString(dr[9]); //Convert.ToString(((Microsoft.Office.Interop.Excel.Range)workSheet.Cells[rowIndex, 10]).Value2);
                         var personelNo = Convert.ToString(dr[2]); //Convert.ToString(((Microsoft.Office.Interop.Excel.Range)workSheet.Cells[rowIndex, 3]).Value2);
 
-                        if (personelNo == "130" || personelNo == "138" || personelNo == "144" || personelNo == "153" ||
-                            personelNo == "190" || personelNo == "1027" || personelNo == "1064" ||
-                            personelNo == "1065" || personelNo == "1067" || personelNo == "1068" ||
-                            personelNo == "50019" || personelNo == "50059" || personelNo == "50069" ||
-                            personelNo == "50064" || personelNo == "50084" || personelNo == "50085" ||
-                            personelNo == "50087" || personelNo == "50088" || personelNo == "50089" ||
-                            personelNo == "50090" || personelNo == "135" || personelNo == "1067" ||
-                            personelNo == "1064" || personelNo == "1065" || personelNo == "1068" ||
-                            personelNo == "1068" || personelNo == "50019" || personelNo == "50059" ||
-                            personelNo == "50064" || personelNo == "1027" || personelNo == "1064" ||
-                            personelNo == "50085" || personelNo == "50087" || personelNo == "50088" ||
-                            personelNo == "50089" || personelNo == "50090" || personelNo == "170" ||
-                            personelNo == "171" || personelNo == "1010" || personelNo == "50036" ||
-                            personelNo == "127" || personelNo == "129" || personelNo == "131" ||
-                            personelNo == "137" || personelNo == "1078" || personelNo == "50056" ||
-                            personelNo == "5" || personelNo == "42" || personelNo == "50016" ||
-                            personelNo == "50069" || personelNo == "50103" || personelNo == "50104" ||
-                            personelNo == "158" || personelNo == "1039" || personelNo == "1043" ||
-                             personelNo == "50129" || personelNo == "1075" || personelNo == "50117" ||
-                            personelNo == "118" || personelNo == "17" || personelNo == "216" || personelNo == "6")
-
-                        {
+                        if (calismaTurleriList.Any(e => e.PersonelNo == personelNo && e.CalismaTuru == 3))
                             continue;
-                        }
 
                         var adSoyad = Convert.ToString(dr[1]); //Convert.ToString(((Microsoft.Office.Interop.Excel.Range)workSheet.Cells[rowIndex, 2]).Value2);
                         if (adSoyad.Contains("ZÝYARETÇ"))
@@ -412,7 +494,6 @@ namespace WebApplication4.Controllers
                         }
                         if (departman.Equals("Euroko"))
                             continue;
-                        // Listede var mı yok mu kontrol edilir.
 
 
                         byte[] utf8Bytes = System.Text.Encoding.UTF8.GetBytes(adSoyad);
@@ -422,12 +503,19 @@ namespace WebApplication4.Controllers
 
                         if (!userList.Any(e => e.PersonelNo == personelNo))
                         {
+                            var calismaTuru = 1;
+                            var calismaTuruPersonel = calismaTurleriList.FirstOrDefault(e => e.PersonelNo == personelNo);
+                            if (calismaTuruPersonel != null)
+                                calismaTuru = calismaTuruPersonel.CalismaTuru;
+
                             userList.Add(new User
                             {
                                 AdSoyad = s_unicode2,
                                 PersonelNo = personelNo,
-                                Departman = s_unicode2Departman
-                            });
+                                Departman = s_unicode2Departman,
+                                CalismaTuru = calismaTuru,
+                                CalismaTuruText = calismaTuru == 1 ? "Tam Zamanlı" : "Out Source"
+                            }); ;
                         }
                         if (string.IsNullOrEmpty(dr[3].ToString()))
                             continue;
@@ -457,23 +545,7 @@ namespace WebApplication4.Controllers
                     }
                 }
             }
-
-
-            foreach (var item in userList)
-            {
-                foreach (var visitorItem in visitorList.Where(e => e.PersonelNo == item.PersonelNo))
-                {
-                    if (item.VisitorsList == null)
-                        item.VisitorsList = new List<Visitor>();
-                    item.VisitorsList.Add(visitorItem);
-                }
-
-            }
-
-            //app.Workbooks.Close();
-            return userList;
         }
-
 
         public static bool TimeBetween(DateTime datetime, TimeSpan start, TimeSpan end)
         {
